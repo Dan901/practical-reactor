@@ -39,10 +39,7 @@ public class c6_CombiningPublishers extends CombiningPublishersBase {
     public void behold_flatmap() {
         Hooks.enableContextLossTracking(); //used for testing - detects if you are cheating!
 
-        //todo: feel free to change code as you need
-        Mono<String> currentUserEmail = null;
-        Mono<String> currentUserMono = getCurrentUser();
-        getUserEmail(null);
+        Mono<String> currentUserEmail = getCurrentUser().flatMap(this::getUserEmail);
 
         //don't change below this line
         StepVerifier.create(currentUserEmail)
@@ -59,9 +56,7 @@ public class c6_CombiningPublishers extends CombiningPublishersBase {
      */
     @Test
     public void task_executor() {
-        //todo: feel free to change code as you need
-        Flux<Void> tasks = null;
-        taskExecutor();
+        Flux<Void> tasks = taskExecutor().flatMap(Function.identity());
 
         //don't change below this line
         StepVerifier.create(tasks)
@@ -78,9 +73,7 @@ public class c6_CombiningPublishers extends CombiningPublishersBase {
      */
     @Test
     public void streaming_service() {
-        //todo: feel free to change code as you need
-        Flux<Message> messageFlux = null;
-        streamingService();
+        Flux<Message> messageFlux = streamingService().flatMapMany(Function.identity());
 
         //don't change below this line
         StepVerifier.create(messageFlux)
@@ -97,10 +90,7 @@ public class c6_CombiningPublishers extends CombiningPublishersBase {
      */
     @Test
     public void i_am_rubber_you_are_glue() {
-        //todo: feel free to change code as you need
-        Flux<Integer> numbers = null;
-        numberService1();
-        numberService2();
+        Flux<Integer> numbers = numberService1().concatWith(numberService2());
 
         //don't change below this line
         StepVerifier.create(numbers)
@@ -123,9 +113,7 @@ public class c6_CombiningPublishers extends CombiningPublishersBase {
      */
     @Test
     public void task_executor_again() {
-        //todo: feel free to change code as you need
-        Flux<Void> tasks = null;
-        taskExecutor();
+        Flux<Void> tasks = taskExecutor().concatMap(Function.identity());
 
         //don't change below this line
         StepVerifier.create(tasks)
