@@ -300,9 +300,9 @@ public class c5_CreatingSequence {
      */
     @Test
     public void multi_threaded_producer() {
-        Flux<Integer> producer = Flux.push(sink -> {
+        Flux<Integer> producer = Flux.create(sink -> {
             for (int i = 0; i < 100; i++) {
-                final int finalI = i;
+                int finalI = i;
                 new Thread(() -> sink.next(finalI)).start(); //don't change this line!
             }
         });

@@ -1,7 +1,9 @@
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.concurrent.TimeoutException;
@@ -10,14 +12,14 @@ import java.util.function.Function;
 
 /**
  * It's time introduce some resiliency by recovering from unexpected events!
- *
+ * <p>
  * Read first:
- *
+ * <p>
  * https://projectreactor.io/docs/core/release/reference/#which.errors
  * https://projectreactor.io/docs/core/release/reference/#error.handling
- *
+ * <p>
  * Useful documentation:
- *
+ * <p>
  * https://projectreactor.io/docs/core/release/reference/#which-operator
  * https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Mono.html
  * https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
@@ -134,8 +136,7 @@ public class c7_ErrorHandling extends ErrorHandlingBase {
     public void billion_dollar_mistake() {
         Flux<String> content = getFilesContent()
                 .flatMap(Function.identity())
-                //todo: change this line only
-                ;
+                .onErrorContinue((th, element) -> System.out.println("Error while reading file"));
 
         StepVerifier.create(content)
                     .expectNext("file1.txt content", "file3.txt content")
@@ -145,20 +146,19 @@ public class c7_ErrorHandling extends ErrorHandlingBase {
     /**
      * Quote from one of creators of Reactor: onErrorContinue is my billion-dollar mistake. `onErrorContinue` is
      * considered as a bad practice, its unsafe and should be avoided.
-     *
+     * <p>
      * {@see <a href="https://nurkiewicz.com/2021/08/onerrorcontinue-reactor.html">onErrorContinue</a>} {@see <a
      * href="https://devdojo.com/ketonemaniac/reactor-onerrorcontinue-vs-onerrorresume">onErrorContinue vs
      * onErrorResume</a>} {@see <a href="https://bsideup.github.io/posts/daily_reactive/where_is_my_exception/">Where is
      * my exception?</a>}
-     *
+     * <p>
      * Your task is to implement `onErrorContinue()` behaviour using `onErrorResume()` operator,
      * by using knowledge gained from previous lessons.
      */
     @Test
     public void resilience() {
-        //todo: change code as you need
         Flux<String> content = getFilesContent()
-                .flatMap(Function.identity()); //start from here
+                .flatMap(fileContent -> fileContent.onErrorResume(th -> Mono.empty()));
 
         //don't change below this line
         StepVerifier.create(content)
@@ -173,8 +173,7 @@ public class c7_ErrorHandling extends ErrorHandlingBase {
     @Test
     public void its_hot_in_here() {
         Mono<Integer> temperature = temperatureSensor()
-                //todo: change this line only
-                ;
+                .retry();
 
         StepVerifier.create(temperature)
                     .expectNext(34)
@@ -189,8 +188,7 @@ public class c7_ErrorHandling extends ErrorHandlingBase {
     @Test
     public void back_off() {
         Mono<String> connection_result = establishConnection()
-                //todo: change this line only
-                ;
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(5)));
 
         StepVerifier.create(connection_result)
                     .expectNext("connection_established")
@@ -204,9 +202,9 @@ public class c7_ErrorHandling extends ErrorHandlingBase {
      */
     @Test
     public void good_old_polling() {
-        //todo: change code as you need
-        Flux<String> alerts = null;
-        nodeAlerts();
+        Flux<String> alerts = nodeAlerts()
+                .repeatWhenEmpty(it -> it.delayElements(Duration.ofSeconds(1)))
+                .repeat();
 
         //don't change below this line
         StepVerifier.create(alerts.take(2))
