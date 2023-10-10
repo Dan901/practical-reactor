@@ -1,4 +1,5 @@
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.reactivestreams.Subscription;
 import reactor.core.Exceptions;
 import reactor.core.publisher.BaseSubscriber;
@@ -9,18 +10,17 @@ import reactor.test.StepVerifierOptions;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.LongStream;
 
 /**
  * Backpressure is a mechanism that allows a consumer to signal to a producer that it is ready receive data.
  * This is important because the producer may be sending data faster than the consumer can process it, and can overwhelm consumer.
- *
+ * <p>
  * Read first:
- *
+ * <p>
  * https://projectreactor.io/docs/core/release/reference/#reactive.backpressure
  * https://projectreactor.io/docs/core/release/reference/#_on_backpressure_and_ways_to_reshape_requests
  * https://projectreactor.io/docs/core/release/reference/#_operators_that_change_the_demand_from_downstream
@@ -28,9 +28,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * https://projectreactor.io/docs/core/release/reference/#_asynchronous_but_single_threaded_push
  * https://projectreactor.io/docs/core/release/reference/#_a_hybrid_pushpull_model
  * https://projectreactor.io/docs/core/release/reference/#_an_alternative_to_lambdas_basesubscriber
- *
+ * <p>
  * Useful documentation:
- *
+ * <p>
  * https://projectreactor.io/docs/core/release/reference/#which-operator
  * https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Mono.html
  * https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
@@ -47,8 +47,7 @@ public class c10_Backpressure extends BackpressureBase {
     public void request_and_demand() {
         CopyOnWriteArrayList<Long> requests = new CopyOnWriteArrayList<>();
         Flux<String> messageStream = messageStream1()
-                //todo: change this line only
-                ;
+                .doOnRequest(requests::add);
 
         StepVerifier.create(messageStream, StepVerifierOptions.create().initialRequest(0))
                     .expectSubscription()
@@ -71,8 +70,8 @@ public class c10_Backpressure extends BackpressureBase {
     public void limited_demand() {
         CopyOnWriteArrayList<Long> requests = new CopyOnWriteArrayList<>();
         Flux<String> messageStream = messageStream2()
-                //todo: do your changes here
-                ;
+                .doOnRequest(requests::add)
+                .limitRate(1);
 
         StepVerifier.create(messageStream, StepVerifierOptions.create().initialRequest(0))
                     .expectSubscription()
@@ -94,7 +93,7 @@ public class c10_Backpressure extends BackpressureBase {
     @Test
     public void uuid_generator() {
         Flux<UUID> uuidGenerator = Flux.create(sink -> {
-            //todo: do your changes here
+            sink.onRequest(request -> LongStream.range(0, request).forEach(i -> sink.next(UUID.randomUUID())));
         });
 
         StepVerifier.create(uuidGenerator
@@ -116,8 +115,7 @@ public class c10_Backpressure extends BackpressureBase {
     @Test
     public void pressure_is_too_much() {
         Flux<String> messageStream = messageStream3()
-                //todo: change this line only
-                ;
+                .onBackpressureError();
 
         StepVerifier.create(messageStream, StepVerifierOptions.create()
                                                               .initialRequest(0))
@@ -137,8 +135,7 @@ public class c10_Backpressure extends BackpressureBase {
     @Test
     public void u_wont_brake_me() {
         Flux<String> messageStream = messageStream4()
-                //todo: change this line only
-                ;
+                .onBackpressureBuffer();
 
         StepVerifier.create(messageStream, StepVerifierOptions.create()
                                                               .initialRequest(0))
@@ -164,27 +161,30 @@ public class c10_Backpressure extends BackpressureBase {
     @Test
     public void subscriber() throws InterruptedException {
         AtomicReference<CountDownLatch> lockRef = new AtomicReference<>(new CountDownLatch(1));
-        AtomicInteger count = new AtomicInteger(0);
+        AtomicInteger counter = new AtomicInteger(0);
         AtomicReference<Subscription> sub = new AtomicReference<>();
 
         remoteMessageProducer()
                 .doOnCancel(() -> lockRef.get().countDown())
                 .subscribeWith(new BaseSubscriber<String>() {
-                    //todo: do your changes only within BaseSubscriber class implementation
                     @Override
                     protected void hookOnSubscribe(Subscription subscription) {
                         sub.set(subscription);
+                        subscription.request(10);
                     }
 
                     @Override
                     protected void hookOnNext(String s) {
                         System.out.println(s);
-                        count.incrementAndGet();
+                        var count = counter.incrementAndGet();
+                        if (count == 10) {
+                            sub.get().cancel();
+                        }
                     }
                     //-----------------------------------------------------
                 });
 
         lockRef.get().await();
-        Assertions.assertEquals(10, count.get());
+        Assertions.assertEquals(10, counter.get());
     }
 }
