@@ -1,4 +1,5 @@
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -11,13 +12,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Often we might require state when working with complex streams. Reactor offers powerful context mechanism to share
  * state between operators, as we can't rely on thread-local variables, because threads are not guaranteed to be the
  * same. In this chapter we will explore usage of Context API.
- *
+ * <p>
  * Read first:
- *
+ * <p>
  * https://projectreactor.io/docs/core/release/reference/#context
- *
+ * <p>
  * Useful documentation:
- *
+ * <p>
  * https://projectreactor.io/docs/core/release/reference/#which-operator
  * https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Mono.html
  * https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
@@ -31,8 +32,7 @@ public class c13_Context extends ContextBase {
      * id to the Reactor context. Your task is to extract the correlation id and attach it to the message object.
      */
     public Mono<Message> messageHandler(String payload) {
-        //todo: do your changes withing this method
-        return Mono.just(new Message("set correlation_id from context here", payload));
+        return Mono.deferContextual(ctx -> Mono.just(new Message(ctx.get(HTTP_CORRELATION_ID), payload)));
     }
 
     @Test
@@ -52,12 +52,11 @@ public class c13_Context extends ContextBase {
      */
     @Test
     public void execution_counter() {
+        var counter = new AtomicInteger();
         Mono<Void> repeat = Mono.deferContextual(ctx -> {
             ctx.get(AtomicInteger.class).incrementAndGet();
             return openConnection();
-        });
-        //todo: change this line only
-        ;
+        }).contextWrite(ctx -> ctx.put(AtomicInteger.class, counter));
 
         StepVerifier.create(repeat.repeat(4))
                     .thenAwait(Duration.ofSeconds(10))
@@ -76,14 +75,25 @@ public class c13_Context extends ContextBase {
      */
     @Test
     public void pagination() {
-        AtomicInteger pageWithError = new AtomicInteger(); //todo: set this field when error occurs
+        AtomicInteger pageWithError = new AtomicInteger();
 
-        //todo: start from here
-        Flux<Integer> results = getPage(0)
-                .flatMapMany(Page::getResult)
-                .repeat(10)
-                .doOnNext(i -> System.out.println("Received: " + i));
-
+        Flux<Integer> results = Mono.deferContextual(ctx -> getPage(ctx.get(AtomicInteger.class).get()))
+                                    .doOnEach(signal -> {
+                                        var pageCounter = signal.getContextView().get(AtomicInteger.class);
+                                        if (signal.isOnError()) {
+                                            var pageNumber = pageCounter.get();
+                                            System.out.println("Error fetching page " + pageNumber);
+                                            pageWithError.set(pageNumber);
+                                        }
+                                        if(signal.isOnNext() || signal.isOnError()) {
+                                            pageCounter.incrementAndGet();
+                                        }
+                                    })
+                                    .retry()
+                                    .flatMapMany(Page::getResult)
+                                    .repeat(10)
+                                    .doOnNext(i -> System.out.println("Received: " + i))
+                                    .contextWrite(ctx -> ctx.put(AtomicInteger.class, new AtomicInteger(0)));
 
         //don't change this code
         StepVerifier.create(results)
